@@ -18,9 +18,7 @@
 	return INVALID_HANDLE_VALUE; }
 #endif
 
-#ifndef snprintf
-const auto& snprintf = _snprintf;
-#endif
+static const auto& snprintf = _snprintf;
 
 #else // WIN32
 

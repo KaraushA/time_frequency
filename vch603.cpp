@@ -14,6 +14,8 @@
 	return INVALID_HANDLE_VALUE; }
 #endif
 
+static const auto& snprintf = _snprintf;
+
 /*	
 	Opens comm port by name and configures it to communicate with the instrument. 
 	Takes port name (e.g. "COM1"), returns handle of the port opened and 
