@@ -59,7 +59,7 @@ HANDLE sr620_open_config_helper(
     COMMTIMEOUTS CommTimeouts;
     memset(&CommTimeouts, 0, sizeof(COMMTIMEOUTS));
     CommTimeouts.ReadTotalTimeoutConstant = 10000;
-    CommTimeouts.ReadIntervalTimeout = 10;
+    CommTimeouts.ReadIntervalTimeout = 4;
 
     if (!SetCommTimeouts(hport, &CommTimeouts))
             STF_RETURN_ERROR(hport);
@@ -267,28 +267,40 @@ int sr620_measure(HANDLE hport, double &meas)
 
 #if WIN32
 
-    DWORD written, rd;
-    if (!WriteFile(hport, sr_meas_str, strlen(sr_meas_str), &written, NULL))
-        return GetLastError();
-
-    if (!ReadFile(hport, buf, 80, &rd, NULL))
-        return GetLastError();
+	DWORD written, rd, tot = 0;
+	if (!WriteFile(hport, sr_meas_str, strlen(sr_meas_str), &written, NULL))
+		return GetLastError();
 
 #else
 
-    ssize_t rd;
-
-    if ( write(hport, sr_meas_str, strlen(sr_meas_str)) < 0 )
-        return errno;
-
-    rd = read(hport, buf, 80);
+	ssize_t rd, tot = 0;
+	if ( write(hport, sr_meas_str, strlen(sr_meas_str)) < 0 )
+		return errno;
 
 #endif
 
-    if ( rd < 2 )
-        return 1;
+	do {
 
-    buf[rd-2] = '\0';
+#if WIN32
+		if (!ReadFile(hport, buf + tot, 80 - tot, &rd, NULL))
+			return GetLastError();
+#else
+		rd = read(hport, buf + tot, 80 - tot);
+#endif
+
+		tot += rd;
+
+		// Correct respond is received
+		if ( tot >= 2 && buf[tot-1] == '\n' && buf[tot-2] == '\r' )
+			break;
+
+	} while ( rd != 0 );
+
+	// Nothing is read, possibly a timeout
+	if ( tot < 2 )
+		return 1;
+
+    buf[tot-2] = '\0';
 
     //#if DEBUG
     //printf("\'%s\' : ", buf);
