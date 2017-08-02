@@ -24,10 +24,10 @@
 HANDLE vch603_open_config_port_by_name(char *name)
 {
 	char pname[80];
-	strcpy(pname, name);
-	strcat ("\\\\.\\", pname);
+	strcpy(pname, "\\\\.\\");
+	strcat(pname, name);
 
-	HANDLE hport = CreateFile(
+	HANDLE hport = CreateFileA(
 			pname,
 			GENERIC_READ | GENERIC_WRITE, 
 			0, 
