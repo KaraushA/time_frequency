@@ -287,3 +287,16 @@ int vch603_reset(HANDLE hport)
 
 	return 0;
 }
+
+int vch603_close(HANDLE hport)
+{
+#if WIN32
+
+	CloseHandle(hport);
+
+#else
+
+	close(hport);
+
+#endif
+}

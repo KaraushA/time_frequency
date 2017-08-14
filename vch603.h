@@ -62,3 +62,5 @@ int vch603_switch(HANDLE, enum VCH_SWITCH_ON_OFF);
 	This might be similar to vch603_switch(port_handle, 0) .
 */
 int vch603_reset(HANDLE);
+
+int vch603_close(HANDLE);
