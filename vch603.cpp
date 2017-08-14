@@ -5,38 +5,53 @@
 
 #include "vch603.h"
 #include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+
+#if WIN32
 
 #ifndef STF_RETURN_ERROR
 #define STF_RETURN_ERROR(handle) { \
 	DWORD err = GetLastError(); \
-	CloseHandle(handle); \
+	if (handle != INVALID_HANDLE_VALUE) \
+		CloseHandle(handle); \
 	SetLastError(err); \
 	return INVALID_HANDLE_VALUE; }
 #endif
 
 static const auto& snprintf = _snprintf;
 
-/*	
-	Opens comm port by name and configures it to communicate with the instrument. 
-	Takes port name (e.g. "COM1"), returns handle of the port opened and 
-	configured. If the function fails, it returns 'INVALID_HANDLE_VALUE' and 
-	the error code can be retrieved by calling GetLastError(). Returned handle 
-	should be closed with CloseHandle() on exit. 
-*/
-HANDLE vch603_open_config_port_by_name(char *name)
+#else
+
+#include <termios.h>
+#include <sys/file.h>
+#include <unistd.h>
+#include <errno.h>
+
+#ifndef STF_RETURN_ERROR
+#define STF_RETURN_ERROR(fd) { \
+        int err = errno; \
+		if (fd != -1) \
+			close(fd); \
+        errno = err; \
+        return -1; }
+#endif
+
+#endif
+
+HANDLE vch603_open_config_helper(char *name)
 {
-	char pname[80];
-	strcpy(pname, "\\\\.\\");
-	strcat(pname, name);
+
+#if WIN32
 
 	HANDLE hport = CreateFileA(
-			pname,
-			GENERIC_READ | GENERIC_WRITE, 
-			0, 
-			NULL, 
-			OPEN_EXISTING, 
-			FILE_ATTRIBUTE_NORMAL,
-			NULL);
+							pname,
+							GENERIC_READ | GENERIC_WRITE, 
+							0, 
+							NULL, 
+							OPEN_EXISTING, 
+							FILE_ATTRIBUTE_NORMAL,
+							NULL);
 
 	if (hport == INVALID_HANDLE_VALUE)
 		return hport;
@@ -55,7 +70,112 @@ HANDLE vch603_open_config_port_by_name(char *name)
 	if (!SetCommState(hport, &ComDCM))
 		STF_RETURN_ERROR(hport);	
 
+	BOOL ret =
+		PurgeComm(hport,
+				PURGE_RXABORT | PURGE_RXCLEAR | PURGE_TXABORT | PURGE_TXCLEAR);
+
+
 	return hport;
+
+#else
+
+	int fd = open( name, O_RDWR | O_NOCTTY );
+    if (fd == -1)
+        return fd;
+
+    struct termios config;
+
+    if ( tcgetattr( fd, &config ) < 0 )
+        STF_RETURN_ERROR(fd);
+
+    //
+    // Input flags - Turn off input processing
+    //
+    // convert break to null byte, no CR to NL translation,
+    // no NL to CR translation, don't mark parity errors or breaks
+    // no input parity check, don't strip high bit off,
+    // no XON/XOFF software flow control
+    //
+    config.c_iflag &= ~(IGNBRK | BRKINT | ICRNL |
+                        INLCR | PARMRK | INPCK | ISTRIP | IXON);
+
+    //
+    // Output flags - Turn off output processing
+    //
+    // no CR to NL translation, no NL to CR-NL translation,
+    // no NL to CR translation, no column 0 CR suppression,
+    // no Ctrl-D suppression, no fill characters, no case mapping,
+    // no local output processing
+    //
+    // config.c_oflag &= ~(OCRNL | ONLCR | ONLRET |
+    //                     ONOCR | ONOEOT| OFILL | OLCUC | OPOST);
+    config.c_oflag = 0;
+
+    //
+    // No line processing
+    //
+    // echo off, echo newline off, canonical mode off,
+    // extended input processing off, signal chars off
+    //
+    config.c_lflag &= ~(ECHO | ECHONL | IEXTEN | ISIG);
+    config.c_lflag |= ICANON;
+
+    //
+    // Turn off character processing
+    //
+    // clear current char size mask, no parity checking,
+    // no output processing, force 8 bit input
+    //
+    config.c_cflag &= ~(CSIZE | PARENB);
+    config.c_cflag |= CS8 | CSTOPB;
+
+    //
+    // One input byte is enough to return from read()
+    // Inter-character timer off
+    //
+    config.c_cc[VMIN]  = 1;
+    config.c_cc[VTIME] = 0;
+
+    //
+    // Communication speed (simple version, using the predefined
+    // constants)
+    //
+    config.c_ospeed = B9600;
+    config.c_ispeed = B9600;
+
+    //
+    // Finally, apply the configuration
+    //
+    if ( tcsetattr(fd, TCSAFLUSH, &config) < 0 )
+        STF_RETURN_ERROR(fd);
+
+    tcflush( fd, TCIOFLUSH );
+
+    return fd;
+
+#endif
+}
+
+/*	
+	Opens comm port by name and configures it to communicate with the instrument. 
+	Takes port name (e.g. "COM1"), returns handle of the port opened and 
+	configured. If the function fails, it returns 'INVALID_HANDLE_VALUE' and 
+	the error code can be retrieved by calling GetLastError(). Returned handle 
+	should be closed with CloseHandle() on exit. 
+*/
+HANDLE vch603_open_config_port_by_name(char *name)
+{
+	char pname[80];
+
+#if WIN32
+    strcpy(pname, "\\\\.\\");
+    strcat(pname, name);
+#else
+    strcpy(pname, "/dev/");
+    strcat(pname, name);
+#endif
+
+	return vch603_open_config_helper(pname);
 }
 
 /* 
@@ -69,9 +189,20 @@ int vch603_set_input(HANDLE hport, int inputNum)
 {
 	char buf[5];
 	snprintf((char*) buf, 5, "A%02d\r\0", inputNum);
+
+#if WIN32
+
 	DWORD written;
 	if (!WriteFile(hport, buf, strlen(buf), &written, NULL))
-		return 1;
+		STF_RETURN_ERROR(INVALID_HANDLE_VALUE);
+
+#else
+
+	if ( write(hport, (const void *) buf, strlen(buf)) < 0 )
+		STF_RETURN_ERROR(-1);
+
+#endif
+
 	return 0;
 }
 
@@ -84,9 +215,20 @@ int vch603_set_output(HANDLE hport, int outputNum)
 {
 	char buf[5];
 	snprintf((char*) buf, 5, "B%1d\r\0", outputNum);
+
+#if WIN32
+
 	DWORD written;
 	if (!WriteFile(hport, buf, strlen(buf), &written, NULL))
-		return 1;
+		STF_RETURN_ERROR(INVALID_HANDLE_VALUE);
+
+#else
+
+	if ( write(hport, (const void *) buf, strlen(buf)) < 0 )
+		STF_RETURN_ERROR(-1);
+
+#endif
+
 	return 0;
 }
 
@@ -101,9 +243,20 @@ int vch603_switch(HANDLE hport, enum VCH_SWITCH_ON_OFF switchOnOff)
 {
 	char buf[5];
 	snprintf((char*) buf, 5, "C%1d\r\0", switchOnOff);
+
+#if WIN32
+
 	DWORD written;
 	if (!WriteFile(hport, buf, strlen(buf), &written, NULL))
-		return 1;
+		STF_RETURN_ERROR(INVALID_HANDLE_VALUE);
+
+#else
+
+	if ( write(hport, (const void *) buf, strlen(buf)) < 0 )
+		STF_RETURN_ERROR(-1);
+
+#endif
+
 	return 0;
 }
 
@@ -118,8 +271,19 @@ int vch603_reset(HANDLE hport)
 {
 	char buf[5];
 	snprintf((char*) buf, 5, "D\r\0");
+
+#if WIN32
+
 	DWORD written;
 	if (!WriteFile(hport, buf, strlen(buf), &written, NULL))
-		return 1;
+		STF_RETURN_ERROR(INVALID_HANDLE_VALUE);
+
+#else
+
+	if ( write(hport, (const void *) buf, strlen(buf)) < 0 )
+		STF_RETURN_ERROR(-1);
+
+#endif
+
 	return 0;
 }
