@@ -1,8 +1,19 @@
 
 #include <stdio.h>
 
+#if WIN32
+
 #include <windows.h>
+
+#else
+
+#include <errno.h>
+
+#endif
+
 #include <time.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "vch603.h"
 #include "sr620.h"
@@ -19,46 +30,51 @@ int test_vch603(int argc, char**argv)
 	{
 		vch603_reset(hport);
 
-		Sleep(DELAY_MS);
+		sleep(DELAY_MS);
 
 		vch603_set_input(hport, (i % 50) + 1);
 		vch603_set_output(hport,(i % 5) + 1);
 		vch603_switch(hport, VCH_SWITCH_ON);
 
-		Sleep(DELAY_MS);
+		sleep(DELAY_MS);
 
 		vch603_switch(hport, VCH_SWITCH_OFF);
 	}
 
-	CloseHandle(hport);
+	vch603_close(hport);
 }
 
 int test_sr620(int argc, char** argv)
 {
 	HANDLE hport = 
-		sr620_open_config_port_by_name("COM2", 
-			SR_EXT_CLK_FREQ_5MHZ);	
+		sr620_open_config_port_by_name("COM2", SR_EXT_CLK_FREQ_5MHZ);	
 
-	if (hport == INVALID_HANDLE_VALUE) {
+	if (hport == -1) {
+#if WIN32
 		int err = GetLastError();
 		fprintf(stderr, "error code %d\n", err);
+#else
+		int err = errno;
+		fprintf(stderr, "error code %d\n", err);
+#endif
 		return 1;
 	}
 
 	const int N = 15;
+	double rez;
 
 	for (int i = 0; i < N; ++i)
 	{
 		printf("%d : ", i);
 		fflush(stdout);
-		double rez = sr620_measure(hport);
+		int ret = sr620_measure(hport, rez);
 
 		printf("%e\n", rez);
 		fflush(stdout);
-		Sleep(rand()%10000);
+		sleep(rand()%10000);
 	}
 
-	CloseHandle(hport);
+	sr620_close(hport);
 
 	return 0;
 }
