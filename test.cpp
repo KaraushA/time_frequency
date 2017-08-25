@@ -6,6 +6,7 @@
 
 #include "vch603.h"
 #include "sr620.h"
+#include "vch315.h"
 
 int test_vch603(int argc, char**argv)
 {
@@ -63,12 +64,47 @@ int test_sr620(int argc, char** argv)
 	return 0;
 }
 
+int test_vch315( void )
+{
+	const char *address = "192.168.0.162";
+	const char *port = "1";
+	const int measurement_interval = 10;
+
+	VCH315 freq_meas;
+	VCH315::Meas meas[10];
+
+	freq_meas.connect( address, port );
+
+	//freq_meas.init( 7 );
+
+	struct tm *meas_tm;
+
+	while ( true ) {
+		int meas_cnt = freq_meas.meas( meas, 10 );
+
+		for ( int i = 0; i < meas_cnt; ++i ) {
+			meas_tm = gmtime( &meas[i].time );
+
+
+			int tod = meas_tm->tm_hour * 3600 + meas_tm->tm_min * 60 + meas_tm->tm_sec;
+
+			if ( tod % measurement_interval != 0 )
+				continue;
+
+			printf( "%d %02d %.12le", tod, meas[i].chan, meas[i].value );
+		}
+
+		Sleep( 100 );
+	}
+}
+
 int main(int argc, char **argv)
 {
 	srand(time(NULL));
 
 	test_sr620(argc, argv);
 	test_vch603(argc, argv);
+	test_vch315();
 
 	return 0;
 }
