@@ -1,15 +1,14 @@
 /* 
-   Header file of module which controls SR 620 universal time interval counter 
-   through comm port. 
+   Header file of module which controls Keysight 53230a time interval counter
+   through VISA interface.
 */
 
 #pragma once
 
 #include "tic.h"
+#include "visa.h"
 
 #if WIN32
-
-#include <windows.h>
 
 #else
 
@@ -17,7 +16,7 @@ typedef int HANDLE;
 
 #endif
 
-class TicSR620: public TimeIntervalCntr {
+class TicKey53230: public TimeIntervalCntr {
 
 public:
     int connect(const char *name);
@@ -27,8 +26,10 @@ public:
     void close();
 
 private:
-    HANDLE hport = INVALID_HANDLE_VALUE;
+    ViSession tic = VI_NULL, defaultRM = VI_NULL;
     EXT_CLK_FREQ ext_freq = EXT_CLK_FREQ_5MHZ;
     double chan1_lvl = 0.5, chan2_lvl = 0.5;
-
 };
+
+
+
