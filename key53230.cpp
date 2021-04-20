@@ -76,7 +76,7 @@ int TicKey53230::connect(const char *name)
     }
 
     // Set trigger levels
-    const char trig_level_str = "INP%1d:LEV %.2f\n";
+    const char *trig_level_str = "INP%1d:LEV %.3f\n";
     char trig_level[50];
 
     sprintf(trig_level, trig_level_str, 1, chan1_lvl);
