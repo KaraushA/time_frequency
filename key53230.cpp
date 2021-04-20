@@ -61,8 +61,6 @@ int TicKey53230::connect(const char *name)
         "*ESE 0\n",
         "SYST:TIM 5\n",
         "CONF:TINT (@2), (@1)\n",
-        "INP1:LEV .5\n",
-        "INP2:LEV .5\n",
         "INP:IMP 50\n",
         "INP2:IMP 50\n",
         "INP:COUP DC\n",
@@ -76,6 +74,21 @@ int TicKey53230::connect(const char *name)
         if (err != VI_SUCCESS)
             return err;
     }
+
+    // Set trigger levels
+    const char trig_level_str = "INP%1d:LEV %.2f\n";
+    char trig_level[50];
+
+    sprintf(trig_level, trig_level_str, 1, chan1_lvl);
+    err = viWrite(tic, (ViConstBuf) trig_level, (ViUInt32) strlen(trig_level), VI_NULL);
+    if (err != VI_SUCCESS)
+        return err;
+
+    sprintf(trig_level, trig_level_str, 2, chan2_lvl);
+    err = viWrite(tic, (ViConstBuf) trig_level, (ViUInt32) strlen(trig_level), VI_NULL);
+    if (err != VI_SUCCESS)
+        return err;
+
 
     printf("Init succeded\n");
 
